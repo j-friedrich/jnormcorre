@@ -96,6 +96,9 @@ from jax import jit, vmap
 import functools
 from functools import partial
 import time
+
+FLOAT = jnp.float64 if jax.config.jax_enable_x64 else jnp.float32 
+COMPLEX = jnp.complex128 if jax.config.jax_enable_x64 else jnp.complex64 
 #%%
 
 
@@ -847,8 +850,8 @@ def get_freq_comps(src_image, target_image):
 
 @partial(jit)
 def get_freq_comps_jax(src_image, target_image):
-    src_image_cpx = jnp.complex128(src_image)
-    target_image_cpx = jnp.complex128(target_image)
+    src_image_cpx = COMPLEX(src_image)
+    target_image_cpx = COMPLEX(target_image)
     src_freq = jnp.fft.fftn(src_image_cpx)
     src_freq = jnp.divide(src_freq, jnp.size(src_freq))
     target_freq = jnp.fft.fftn(target_image_cpx)
@@ -1004,7 +1007,7 @@ def register_translation_jax_simple(src_image, target_image, upsample_factor, ma
     midpoints = jnp.array([jnp.fix(shape[0]/2), jnp.fix(shape[1]/2)])
 
     
-    shifts = jnp.array(maxima, dtype=jnp.float64)
+    shifts = jnp.array(maxima, dtype=FLOAT)
 
     first_shift = jax.lax.cond(shifts[0] > midpoints[0], subtract_values, return_identity, *(shifts[0], shape[0]))
     second_shift = jax.lax.cond(shifts[1] > midpoints[1], subtract_values, return_identity, *(shifts[1], shape[1]))
@@ -1015,7 +1018,7 @@ def register_translation_jax_simple(src_image, target_image, upsample_factor, ma
     upsampled_region_size = int(upsample_factor*1.5 + 0.5)
     # Center of output array at dftshift + 1
     dftshift = jnp.fix(upsampled_region_size/ 2.0)
-    upsample_factor = jnp.array(upsample_factor, dtype=jnp.float64)
+    upsample_factor = jnp.array(upsample_factor, dtype=FLOAT)
     normalization = (src_freq.size * upsample_factor ** 2)
     # Matrix multiply DFT around the current shift estimate
     sample_region_offset = dftshift - shifts * upsample_factor
@@ -1029,7 +1032,7 @@ def register_translation_jax_simple(src_image, target_image, upsample_factor, ma
     maxima = jnp.array(jnp.unravel_index(
         jnp.argmax(jnp.abs(cross_correlation)),
         cross_correlation.shape),
-        dtype=jnp.float64)
+        dtype=FLOAT)
     maxima -= dftshift
     shifts = shifts + maxima / upsample_factor
     CCmax = cross_correlation.max()
@@ -1332,7 +1335,7 @@ def register_translation_jax_full(src_image, target_image, upsample_factor,\
     
     midpoints = jnp.array([jnp.fix(shape[0]/2), jnp.fix(shape[1]/2)])
     
-    shifts = jnp.array(maxima, dtype=jnp.float64)
+    shifts = jnp.array(maxima, dtype=FLOAT)
 
     first_shift = jax.lax.cond(shifts[0] > midpoints[0], subtract_values, return_identity, *(shifts[0], shape[0]))
     second_shift = jax.lax.cond(shifts[1] > midpoints[1], subtract_values, return_identity, *(shifts[1], shape[1]))
@@ -1343,7 +1346,7 @@ def register_translation_jax_full(src_image, target_image, upsample_factor,\
     upsampled_region_size = int(upsample_factor*1.5 + 0.5)
     # Center of output array at dftshift + 1
     dftshift = jnp.fix(upsampled_region_size/ 2.0)
-    upsample_factor = jnp.array(upsample_factor, dtype=jnp.float64)
+    upsample_factor = jnp.array(upsample_factor, dtype=FLOAT)
     normalization = (src_freq.size * upsample_factor ** 2)
     # Matrix multiply DFT around the current shift estimate
     sample_region_offset = dftshift - shifts * upsample_factor
@@ -1357,7 +1360,7 @@ def register_translation_jax_full(src_image, target_image, upsample_factor,\
     maxima = jnp.array(jnp.unravel_index(
         jnp.argmax(jnp.abs(cross_correlation)),
         cross_correlation.shape),
-        dtype=jnp.float64)
+        dtype=FLOAT)
     maxima -= dftshift
     shifts = shifts + maxima / upsample_factor
     CCmax = cross_correlation.max()
@@ -1704,14 +1707,14 @@ def register_translation(src_image, target_image, upsample_factor=1,
 def update_src_freq_jax(src_freq):
     out = jnp.fft.fftn(src_freq)
     out_norm = jnp.divide(out, jnp.size(out))
-    return jnp.complex128(out_norm)
+    return COMPLEX(out_norm)
 
 @partial(jit)
 def update_src_freq_identity(src_freq):
-    return jnp.complex128(src_freq)
+    return COMPLEX(src_freq)
 
 def update_src_freq_flag(src_freq, flag):
-    output = jnp.complex128(jax.lax.cond(~flag, update_src_freq_jax, update_src_freq_identity, src_freq))
+    output = COMPLEX(jax.lax.cond(~flag, update_src_freq_jax, update_src_freq_identity, src_freq))
     return output
 
    
@@ -1802,10 +1805,10 @@ def apply_shifts_dft_fast_1(src_freq, shift_a, shift_b, diffphase, is_freq):
 
     
 
-    max_h = ceil_max(shift_a, 0.).astype('int')
-    max_w = ceil_max(shift_b, 0.).astype('int')
-    min_h = floor_min(shift_a, 0.).astype('int')
-    min_w = floor_min(shift_b, 0.).astype('int')
+    max_h = ceil_max(shift_a, 0.).astype('int32')
+    max_w = ceil_max(shift_b, 0.).astype('int32')
+    min_h = floor_min(shift_a, 0.).astype('int32')
+    min_w = floor_min(shift_b, 0.).astype('int32')
     
     
     
@@ -1823,12 +1826,12 @@ def fill_minw(img, k):
     x, y = img.shape
     key = y + k
     
-    filter_mat = (jnp.arange(y) < key).astype('int')
+    filter_mat = (jnp.arange(y) < key).astype('int32')
     filter_mat = jnp.broadcast_to(filter_mat, (x,y))
     
     img_filter = filter_mat * img
     
-    addend = (jnp.arange(y) >= key).astype('int')
+    addend = (jnp.arange(y) >= key).astype('int32')
     addend = jnp.broadcast_to(addend, (x,y))
     addend = addend * img[:, k-1, None]
     
@@ -1838,12 +1841,12 @@ def fill_minw(img, k):
 @partial(jit)
 def fill_maxw(img, k):
     x,y = img.shape
-    filter_mat = (jnp.arange(y) >= k).astype('int')
+    filter_mat = (jnp.arange(y) >= k).astype('int32')
     filter_mat = jnp.broadcast_to(filter_mat, (x,y))
     
     img_filtered = filter_mat * img
     
-    addend = (jnp.arange(y) < k).astype('int')
+    addend = (jnp.arange(y) < k).astype('int32')
     addend = jnp.broadcast_to(addend, (x,y))
     addend = addend * img[:, k, None]
     
@@ -1853,7 +1856,7 @@ def fill_maxw(img, k):
 @partial(jit)
 def fill_maxh(img, k):
     x, y = img.shape
-    filter_mat = jnp.reshape((jnp.arange(x) >= k), (-1, 1)).astype('int')
+    filter_mat = jnp.reshape((jnp.arange(x) >= k), (-1, 1)).astype('int32')
     filter_mat = jnp.broadcast_to(filter_mat, (x, y))
     img_filtered = img * filter_mat
     
@@ -1867,12 +1870,12 @@ def fill_maxh(img, k):
 def fill_minh(img, k):
     x, y = img.shape
     key = x + k
-    filtered_mat = jnp.reshape((jnp.arange(x) < key), (-1, 1)).astype('int')
+    filtered_mat = jnp.reshape((jnp.arange(x) < key), (-1, 1)).astype('int32')
     filtered_mat = jnp.broadcast_to(filtered_mat, (x, y))
     
     filtered_img = img * filtered_mat
     
-    addend = jnp.reshape((jnp.arange(x) >= key), (-1, 1)).astype('int')
+    addend = jnp.reshape((jnp.arange(x) >= key), (-1, 1)).astype('int32')
     addend = jnp.broadcast_to(addend, (x,y))
     addend_final = addend * img[key-1]
     
@@ -1956,8 +1959,8 @@ def create_weight_matrix_for_blending(img, overlaps, strides):
 def tile_and_correct_rigid_1p(img, img_filtered, template, max_shifts,
                      upsample_factor_fft, add_to_movie):
     
-    img = jnp.add(img, add_to_movie).astype(jnp.float64)
-    template = jnp.add(template, add_to_movie).astype(jnp.float64)
+    img = jnp.add(img, add_to_movie).astype(FLOAT)
+    template = jnp.add(template, add_to_movie).astype(FLOAT)
 
 
     # compute rigid shifts
@@ -1979,8 +1982,8 @@ tile_and_correct_rigid_1p_vmap = jit(vmap(tile_and_correct_rigid_1p, in_axes=(0,
 def tile_and_correct_rigid(img, template, max_shifts,
                      upsample_factor_fft, add_to_movie):
     
-    img = jnp.add(img, add_to_movie).astype(jnp.float64)
-    template = jnp.add(template, add_to_movie).astype(jnp.float64)
+    img = jnp.add(img, add_to_movie).astype(FLOAT)
+    template = jnp.add(template, add_to_movie).astype(FLOAT)
 
     # compute rigid shifts
     rigid_shts, sfr_freq, diffphase = register_translation_jax_simple(
@@ -2079,8 +2082,8 @@ def tile_and_correct_pwrigid_1p(img, img_filtered, template, strides_0, strides_
     strides = [strides_0, strides_1]
     overlaps = [overlaps_0, overlaps_1]
 
-    img = jnp.array(img).astype(jnp.float64)
-    template = jnp.array(template).astype(jnp.float64)
+    img = jnp.array(img).astype(FLOAT)
+    template = jnp.array(template).astype(FLOAT)
     
 
     img_filtered = img_filtered + add_to_movie
@@ -2195,8 +2198,8 @@ def tile_and_correct(img, template, strides_0, strides_1, overlaps_0, overlaps_1
     overlaps = [overlaps_0, overlaps_1]
 
 #     img = img.astype(np.float64).copy()
-    img = jnp.array(img).astype(jnp.float64)
-    template = jnp.array(template).astype(jnp.float64)
+    img = jnp.array(img).astype(FLOAT)
+    template = jnp.array(template).astype(FLOAT)
 
     img = img + add_to_movie
     template = template + add_to_movie
@@ -2321,8 +2324,8 @@ def tile_and_correct_ideal(img, template, strides_0, strides_1, overlaps_0, over
     overlaps = [overlaps_0, overlaps_1]
 
 #     img = img.astype(np.float64).copy()
-    img = jnp.array(img).astype(jnp.float64)
-    template = jnp.array(template).astype(jnp.float64)
+    img = jnp.array(img).astype(FLOAT)
+    template = jnp.array(template).astype(FLOAT)
 
     img = img + add_to_movie
     template = template + add_to_movie
